@@ -2,11 +2,16 @@ const express = require('express');
 const path = require('path');
 const fs = require('fs');
 const initSqlJs = require('sql.js');
+const multer = require('multer');
+const pdfParse = require('pdf-parse');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || '';
 
-app.use(express.json());
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
+
+app.use(express.json({ limit: '5mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
 let db;
@@ -217,6 +222,156 @@ app.get('/api/shopping-list', (req, res) => {
     }
 
     res.json({ meals: mealList, ingredients });
+});
+
+// ── Recipe Import (Claude AI) ──
+
+app.post('/api/import-recipes', upload.single('file'), async (req, res) => {
+    if (!ANTHROPIC_API_KEY) {
+        return res.status(500).json({ error: 'ANTHROPIC_API_KEY not configured on server' });
+    }
+    if (!req.file) {
+        return res.status(400).json({ error: 'No file uploaded' });
+    }
+
+    try {
+        let textContent = '';
+        let messages = [];
+        const mime = req.file.mimetype;
+
+        // Extract text based on file type
+        if (mime === 'application/pdf') {
+            const pdfData = await pdfParse(req.file.buffer);
+            textContent = pdfData.text;
+        } else if (mime.startsWith('text/') || mime === 'application/json') {
+            textContent = req.file.buffer.toString('utf-8');
+        } else if (mime.startsWith('image/')) {
+            // Send image directly to Claude as base64
+            const base64 = req.file.buffer.toString('base64');
+            const mediaType = mime === 'image/jpg' ? 'image/jpeg' : mime;
+            messages = [{
+                role: 'user',
+                content: [
+                    {
+                        type: 'image',
+                        source: { type: 'base64', media_type: mediaType, data: base64 }
+                    },
+                    {
+                        type: 'text',
+                        text: `Extract ALL recipes from this image. For each recipe, return a JSON array of objects with these exact fields:
+- "name": string (recipe name)
+- "description": string (brief description or cooking notes)
+- "category": string (one of: Main, Side, Breakfast, Soup, Salad, Dessert, Snack, Drink)
+- "ingredients": array of {"name": string, "quantity": number or null, "unit": string}
+
+Return ONLY valid JSON array, no markdown, no explanation. If quantities are written as fractions like "1/2", convert to decimal (0.5). If no quantity is specified, use null.`
+                    }
+                ]
+            }];
+        } else if (mime === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
+            // For .docx, extract raw text from the XML inside the zip
+            // Simple approach: just read the buffer as-is and let Claude parse what it can
+            textContent = req.file.buffer.toString('utf-8');
+            // If that's garbled, try to extract readable portions
+            if (textContent.includes('PK')) {
+                // It's a zip (docx), extract text between XML tags
+                const matches = req.file.buffer.toString('utf-8').match(/<w:t[^>]*>([^<]+)<\/w:t>/g);
+                if (matches) {
+                    textContent = matches.map(m => m.replace(/<[^>]+>/g, '')).join(' ');
+                } else {
+                    textContent = req.file.buffer.toString('utf-8').replace(/<[^>]+>/g, ' ').replace(/[^\x20-\x7E\n]/g, '').trim();
+                }
+            }
+        } else {
+            // Try to read as text anyway
+            textContent = req.file.buffer.toString('utf-8');
+        }
+
+        // Build messages for text-based content
+        if (!messages.length) {
+            if (!textContent.trim()) {
+                return res.status(400).json({ error: 'Could not extract text from file. Try PDF, TXT, or an image.' });
+            }
+            messages = [{
+                role: 'user',
+                content: `Extract ALL recipes from the following text. For each recipe, return a JSON array of objects with these exact fields:
+- "name": string (recipe name)
+- "description": string (brief description or cooking notes)  
+- "category": string (one of: Main, Side, Breakfast, Soup, Salad, Dessert, Snack, Drink)
+- "ingredients": array of {"name": string, "quantity": number or null, "unit": string}
+
+Return ONLY a valid JSON array, no markdown backticks, no explanation. If quantities are written as fractions like "1/2", convert to decimal (0.5). If no quantity is specified, use null.
+
+---
+${textContent}
+---`
+            }];
+        }
+
+        // Call Claude API
+        const response = await fetch('https://api.anthropic.com/v1/messages', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'x-api-key': ANTHROPIC_API_KEY,
+                'anthropic-version': '2023-06-01'
+            },
+            body: JSON.stringify({
+                model: 'claude-haiku-4-5-20251001',
+                max_tokens: 4096,
+                messages
+            })
+        });
+
+        if (!response.ok) {
+            const errBody = await response.text();
+            console.error('Claude API error:', response.status, errBody);
+            return res.status(500).json({ error: `Claude API error: ${response.status}`, details: errBody });
+        }
+
+        const data = await response.json();
+        const text = data.content.map(c => c.text || '').join('');
+        
+        // Parse JSON from Claude's response (strip any markdown fences just in case)
+        const cleaned = text.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
+        let recipes;
+        try {
+            recipes = JSON.parse(cleaned);
+        } catch (parseErr) {
+            console.error('Failed to parse Claude response:', cleaned);
+            return res.status(500).json({ error: 'Failed to parse recipes from AI response', raw: cleaned });
+        }
+
+        if (!Array.isArray(recipes)) {
+            recipes = [recipes];
+        }
+
+        // Insert into database
+        const inserted = [];
+        for (const recipe of recipes) {
+            if (!recipe.name) continue;
+            db.run(`INSERT INTO menu_items (name, description, category) VALUES (?, ?, ?)`,
+                [recipe.name, recipe.description || '', recipe.category || 'Main']);
+            const idResult = db.exec(`SELECT last_insert_rowid() as id`);
+            const id = idResult[0].values[0][0];
+
+            if (recipe.ingredients && recipe.ingredients.length) {
+                for (const ing of recipe.ingredients) {
+                    if (!ing.name) continue;
+                    db.run(`INSERT INTO ingredients (menu_item_id, name, quantity, unit) VALUES (?, ?, ?, ?)`,
+                        [id, ing.name, ing.quantity || null, ing.unit || '']);
+                }
+            }
+            inserted.push({ id, name: recipe.name, ingredientCount: (recipe.ingredients || []).length });
+        }
+        saveDB();
+
+        res.json({ success: true, imported: inserted });
+
+    } catch (err) {
+        console.error('Import error:', err);
+        res.status(500).json({ error: 'Import failed: ' + err.message });
+    }
 });
 
 // ── Serve HTML ──
