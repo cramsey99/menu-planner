@@ -25,8 +25,9 @@ let db;
 
 async function initDB() {
     const SQL = await initSqlJs();
-    const dbPath = path.join(__dirname, 'data', 'menu.db');
-    const dataDir = path.join(__dirname, 'data');
+    const dbPath = process.env.DB_PATH || path.join(__dirname, 'data', 'menu.db');
+    const dataDir = path.dirname(dbPath);
+    dbFilePath = dbPath;
     
     if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
     
@@ -66,10 +67,12 @@ async function initDB() {
     console.log('Database initialized');
 }
 
+let dbFilePath;
+
 function saveDB() {
     const data = db.export();
     const buffer = Buffer.from(data);
-    fs.writeFileSync(path.join(__dirname, 'data', 'menu.db'), buffer);
+    fs.writeFileSync(dbFilePath, buffer);
 }
 
 // ── Menu Items CRUD ──
