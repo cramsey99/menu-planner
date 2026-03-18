@@ -3,7 +3,7 @@ const path = require('path');
 const fs = require('fs');
 const initSqlJs = require('sql.js');
 const multer = require('multer');
-const pdfParse = require('pdf-parse');
+const { PDFParse } = require('pdf-parse');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -241,7 +241,7 @@ app.post('/api/import-recipes', upload.single('file'), async (req, res) => {
 
         // Extract text based on file type
         if (mime === 'application/pdf') {
-            const pdfData = await pdfParse(req.file.buffer);
+            const pdfData = await PDFParse(req.file.buffer);
             textContent = pdfData.text;
         } else if (mime.startsWith('text/') || mime === 'application/json') {
             textContent = req.file.buffer.toString('utf-8');
