@@ -30,6 +30,11 @@ async function initDB() {
     const dataDir = path.dirname(dbPath);
     dbFilePath = dbPath;
     
+    console.log('DB_PATH env:', process.env.DB_PATH || '(not set)');
+    console.log('Using database at:', dbPath);
+    console.log('Data dir exists:', fs.existsSync(dataDir));
+    console.log('DB file exists:', fs.existsSync(dbPath));
+    
     if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
     
     if (fs.existsSync(dbPath)) {
