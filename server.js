@@ -3,7 +3,14 @@ const path = require('path');
 const fs = require('fs');
 const initSqlJs = require('sql.js');
 const multer = require('multer');
-const { PDFParse } = require('pdf-parse');
+
+const PARSE_PROMPT = `Extract ALL recipes from this document. For each recipe, return a JSON array of objects with these exact fields:
+- "name": string (recipe name)
+- "description": string (brief description or cooking notes)
+- "category": string (one of: Main, Side, Breakfast, Soup, Salad, Dessert, Snack, Drink)
+- "ingredients": array of {"name": string, "quantity": number or null, "unit": string}
+
+Return ONLY valid JSON array, no markdown, no explanation. If quantities are written as fractions like "1/2", convert to decimal (0.5). If no quantity is specified, use null.`;
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -241,8 +248,21 @@ app.post('/api/import-recipes', upload.single('file'), async (req, res) => {
 
         // Extract text based on file type
         if (mime === 'application/pdf') {
-            const pdfData = await PDFParse(req.file.buffer);
-            textContent = pdfData.text;
+            // Send PDF directly to Claude as a document
+            const base64 = req.file.buffer.toString('base64');
+            messages = [{
+                role: 'user',
+                content: [
+                    {
+                        type: 'document',
+                        source: { type: 'base64', media_type: 'application/pdf', data: base64 }
+                    },
+                    {
+                        type: 'text',
+                        text: PARSE_PROMPT
+                    }
+                ]
+            }];
         } else if (mime.startsWith('text/') || mime === 'application/json') {
             textContent = req.file.buffer.toString('utf-8');
         } else if (mime.startsWith('image/')) {
@@ -258,13 +278,7 @@ app.post('/api/import-recipes', upload.single('file'), async (req, res) => {
                     },
                     {
                         type: 'text',
-                        text: `Extract ALL recipes from this image. For each recipe, return a JSON array of objects with these exact fields:
-- "name": string (recipe name)
-- "description": string (brief description or cooking notes)
-- "category": string (one of: Main, Side, Breakfast, Soup, Salad, Dessert, Snack, Drink)
-- "ingredients": array of {"name": string, "quantity": number or null, "unit": string}
-
-Return ONLY valid JSON array, no markdown, no explanation. If quantities are written as fractions like "1/2", convert to decimal (0.5). If no quantity is specified, use null.`
+                        text: PARSE_PROMPT
                     }
                 ]
             }];
@@ -294,13 +308,7 @@ Return ONLY valid JSON array, no markdown, no explanation. If quantities are wri
             }
             messages = [{
                 role: 'user',
-                content: `Extract ALL recipes from the following text. For each recipe, return a JSON array of objects with these exact fields:
-- "name": string (recipe name)
-- "description": string (brief description or cooking notes)  
-- "category": string (one of: Main, Side, Breakfast, Soup, Salad, Dessert, Snack, Drink)
-- "ingredients": array of {"name": string, "quantity": number or null, "unit": string}
-
-Return ONLY a valid JSON array, no markdown backticks, no explanation. If quantities are written as fractions like "1/2", convert to decimal (0.5). If no quantity is specified, use null.
+                content: `${PARSE_PROMPT}
 
 ---
 ${textContent}
