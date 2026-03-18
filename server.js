@@ -49,6 +49,7 @@ async function initDB() {
         name TEXT NOT NULL,
         description TEXT,
         category TEXT DEFAULT 'Main',
+        easy INTEGER DEFAULT 0,
         created_at TEXT DEFAULT (datetime('now'))
     )`);
 
@@ -77,6 +78,9 @@ async function initDB() {
         FOREIGN KEY (menu_item_id) REFERENCES menu_items(id) ON DELETE CASCADE
     )`);
 
+    // Migration: add easy column if it doesn't exist
+    try { db.run(`ALTER TABLE menu_items ADD COLUMN easy INTEGER DEFAULT 0`); } catch(e) {}
+
     saveDB();
     console.log('Database initialized');
 }
@@ -88,6 +92,24 @@ function saveDB() {
     const buffer = Buffer.from(data);
     fs.writeFileSync(dbFilePath, buffer);
 }
+
+// ── Debug ──
+app.get('/api/debug', (req, res) => {
+    const info = {
+        DB_PATH_env: process.env.DB_PATH || '(not set)',
+        dbFilePath: dbFilePath,
+        dbFileExists: fs.existsSync(dbFilePath),
+        dataDir: path.dirname(dbFilePath),
+        dataDirExists: fs.existsSync(path.dirname(dbFilePath)),
+        dataDirContents: fs.existsSync(path.dirname(dbFilePath)) ? fs.readdirSync(path.dirname(dbFilePath)) : [],
+        menuItemCount: 0
+    };
+    try {
+        const result = db.exec('SELECT COUNT(*) as cnt FROM menu_items');
+        if (result.length) info.menuItemCount = result[0].values[0][0];
+    } catch(e) { info.dbError = e.message; }
+    res.json(info);
+});
 
 // ── Menu Items CRUD ──
 
@@ -122,11 +144,11 @@ app.get('/api/menu-items/:id', (req, res) => {
 });
 
 app.post('/api/menu-items', (req, res) => {
-    const { name, description, category, ingredients, steps } = req.body;
+    const { name, description, category, easy, ingredients, steps } = req.body;
     if (!name) return res.status(400).json({ error: 'Name required' });
 
-    db.run(`INSERT INTO menu_items (name, description, category) VALUES (?, ?, ?)`,
-        [name, description || '', category || 'Main']);
+    db.run(`INSERT INTO menu_items (name, description, category, easy) VALUES (?, ?, ?, ?)`,
+        [name, description || '', category || 'Main', easy ? 1 : 0]);
     const idResult = db.exec(`SELECT last_insert_rowid() as id`);
     const id = idResult[0].values[0][0];
 
@@ -150,9 +172,9 @@ app.post('/api/menu-items', (req, res) => {
 });
 
 app.put('/api/menu-items/:id', (req, res) => {
-    const { name, description, category, ingredients, steps } = req.body;
-    db.run(`UPDATE menu_items SET name=?, description=?, category=? WHERE id=?`,
-        [name, description || '', category || 'Main', req.params.id]);
+    const { name, description, category, easy, ingredients, steps } = req.body;
+    db.run(`UPDATE menu_items SET name=?, description=?, category=?, easy=? WHERE id=?`,
+        [name, description || '', category || 'Main', easy ? 1 : 0, req.params.id]);
 
     // Replace all ingredients
     db.run(`DELETE FROM ingredients WHERE menu_item_id = ?`, [req.params.id]);

@@ -163,6 +163,18 @@ label {
     cursor: pointer;
     transition: all 0.15s;
     background: var(--surface);
+    position: relative;
+    overflow: hidden;
+}
+.recipe-list-item.easy::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 5px;
+    height: 100%;
+    background: var(--green);
+    border-radius: var(--radius-sm) 0 0 var(--radius-sm);
 }
 .recipe-list-item:hover { border-color: var(--accent); background: var(--accent-light); }
 .recipe-list-item.selected { border-color: var(--accent); background: var(--accent-light); }
@@ -548,6 +560,12 @@ label {
                             <option>Drink</option>
                         </select>
                     </div>
+                    <div style="flex:0.5;display:flex;align-items:flex-end;padding-bottom:0.35rem;">
+                        <label style="display:flex;align-items:center;gap:0.4rem;cursor:pointer;white-space:nowrap;margin:0;">
+                            <input type="checkbox" id="recipe-easy" style="width:auto;accent-color:var(--green);">
+                            <span style="color:var(--green);font-weight:600;">Easy</span>
+                        </label>
+                    </div>
                 </div>
                 <div>
                     <label>Description / Notes</label>
@@ -695,7 +713,7 @@ function renderRecipeList() {
         return;
     }
     list.innerHTML = filtered.map(i => `
-        <div class="recipe-list-item ${i.id === selectedRecipeId ? 'selected' : ''}" onclick="selectRecipe(${i.id})">
+        <div class="recipe-list-item ${i.id === selectedRecipeId ? 'selected' : ''} ${i.easy ? 'easy' : ''}" onclick="selectRecipe(${i.id})">
             <span class="name">${esc(i.name)}</span>
             <span class="category">${esc(i.category||'Main')}</span>
         </div>
@@ -712,6 +730,7 @@ function newRecipe() {
     document.getElementById('delete-recipe-btn').style.display = 'none';
     document.getElementById('recipe-name').value = '';
     document.getElementById('recipe-category').value = 'Main';
+    document.getElementById('recipe-easy').checked = false;
     document.getElementById('recipe-description').value = '';
     document.getElementById('ingredients-list').innerHTML = '';
     document.getElementById('steps-list').innerHTML = '';
@@ -731,6 +750,7 @@ async function selectRecipe(id) {
     document.getElementById('delete-recipe-btn').style.display = '';
     document.getElementById('recipe-name').value = item.name;
     document.getElementById('recipe-category').value = item.category || 'Main';
+    document.getElementById('recipe-easy').checked = !!item.easy;
     document.getElementById('recipe-description').value = item.description || '';
     document.getElementById('ingredients-list').innerHTML = '';
     (item.ingredients || []).forEach(ing => addIngredientRow(ing));
@@ -779,6 +799,7 @@ async function saveRecipe() {
     const body = {
         name,
         category: document.getElementById('recipe-category').value,
+        easy: document.getElementById('recipe-easy').checked,
         description: document.getElementById('recipe-description').value.trim(),
         ingredients: [],
         steps: []
