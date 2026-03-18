@@ -193,6 +193,38 @@ label {
     display: flex; align-items: center; justify-content: center;
 }
 
+.step-row {
+    display: flex;
+    gap: 0.5rem;
+    align-items: flex-start;
+    margin-bottom: 0.4rem;
+}
+.step-row .step-num {
+    flex-shrink: 0;
+    width: 26px; height: 26px;
+    border-radius: 50%;
+    background: var(--accent);
+    color: #fff;
+    font-size: 0.75rem;
+    font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+    margin-top: 0.35rem;
+}
+.step-row textarea {
+    flex: 1;
+    min-height: 2.4rem;
+    resize: vertical;
+}
+.step-row button {
+    flex-shrink: 0;
+    width: 30px; height: 30px;
+    border: none; border-radius: 50%;
+    background: #d44; color: #fff;
+    cursor: pointer; font-size: 1rem;
+    display: flex; align-items: center; justify-content: center;
+    margin-top: 0.2rem;
+}
+
 /* ═══════════════════════════════
    CALENDAR TAB
    ═══════════════════════════════ */
@@ -528,6 +560,13 @@ label {
                     </div>
                     <div id="ingredients-list"></div>
                 </div>
+                <div class="mt-2">
+                    <div class="flex-between mb-1">
+                        <label style="margin:0">Instructions</label>
+                        <button class="btn btn-secondary btn-sm" onclick="addStepRow()">+ Add Step</button>
+                    </div>
+                    <div id="steps-list"></div>
+                </div>
             </div>
             <div id="recipe-empty" class="panel empty-state">
                 <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z"/><path d="M8 12h8M12 8v8"/></svg>
@@ -675,9 +714,11 @@ function newRecipe() {
     document.getElementById('recipe-category').value = 'Main';
     document.getElementById('recipe-description').value = '';
     document.getElementById('ingredients-list').innerHTML = '';
+    document.getElementById('steps-list').innerHTML = '';
     addIngredientRow();
     addIngredientRow();
     addIngredientRow();
+    addStepRow();
     renderRecipeList();
 }
 
@@ -694,6 +735,9 @@ async function selectRecipe(id) {
     document.getElementById('ingredients-list').innerHTML = '';
     (item.ingredients || []).forEach(ing => addIngredientRow(ing));
     if (!item.ingredients || !item.ingredients.length) { addIngredientRow(); addIngredientRow(); }
+    document.getElementById('steps-list').innerHTML = '';
+    (item.steps || []).forEach(step => addStepRow(step));
+    if (!item.steps || !item.steps.length) { addStepRow(); }
     renderRecipeList();
 }
 
@@ -709,6 +753,26 @@ function addIngredientRow(data) {
     document.getElementById('ingredients-list').appendChild(row);
 }
 
+function addStepRow(data) {
+    const list = document.getElementById('steps-list');
+    const num = list.querySelectorAll('.step-row').length + 1;
+    const row = document.createElement('div');
+    row.className = 'step-row';
+    const instruction = (data && (typeof data === 'string' ? data : data.instruction)) || '';
+    row.innerHTML = `
+        <span class="step-num">${num}</span>
+        <textarea placeholder="Describe this step...">${esc(instruction)}</textarea>
+        <button onclick="this.parentElement.remove();renumberSteps()">×</button>
+    `;
+    list.appendChild(row);
+}
+
+function renumberSteps() {
+    document.querySelectorAll('#steps-list .step-row').forEach((row, i) => {
+        row.querySelector('.step-num').textContent = i + 1;
+    });
+}
+
 async function saveRecipe() {
     const name = document.getElementById('recipe-name').value.trim();
     if (!name) { alert('Enter a recipe name'); return; }
@@ -716,7 +780,8 @@ async function saveRecipe() {
         name,
         category: document.getElementById('recipe-category').value,
         description: document.getElementById('recipe-description').value.trim(),
-        ingredients: []
+        ingredients: [],
+        steps: []
     };
     document.querySelectorAll('#ingredients-list .ingredient-row').forEach(row => {
         const inputs = row.querySelectorAll('input');
@@ -727,6 +792,12 @@ async function saveRecipe() {
                 quantity: inputs[1].value ? parseFloat(inputs[1].value) : null,
                 unit: inputs[2].value.trim()
             });
+        }
+    });
+    document.querySelectorAll('#steps-list .step-row').forEach(row => {
+        const instruction = row.querySelector('textarea').value.trim();
+        if (instruction) {
+            body.steps.push({ instruction });
         }
     });
     if (selectedRecipeId) {

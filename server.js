@@ -9,8 +9,9 @@ const PARSE_PROMPT = `Extract ALL recipes from this document. For each recipe, r
 - "description": string (brief description or cooking notes)
 - "category": string (one of: Main, Side, Breakfast, Soup, Salad, Dessert, Snack, Drink)
 - "ingredients": array of {"name": string, "quantity": number or null, "unit": string}
+- "steps": array of strings, each string is one instruction step in order
 
-Return ONLY valid JSON array, no markdown, no explanation. If quantities are written as fractions like "1/2", convert to decimal (0.5). If no quantity is specified, use null.`;
+Return ONLY valid JSON array, no markdown, no explanation. If quantities are written as fractions like "1/2", convert to decimal (0.5). If no quantity is specified, use null. If no steps/instructions are found, use an empty array.`;
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -52,6 +53,14 @@ async function initDB() {
         name TEXT NOT NULL,
         quantity REAL,
         unit TEXT,
+        FOREIGN KEY (menu_item_id) REFERENCES menu_items(id) ON DELETE CASCADE
+    )`);
+
+    db.run(`CREATE TABLE IF NOT EXISTS steps (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        menu_item_id INTEGER NOT NULL,
+        step_number INTEGER NOT NULL,
+        instruction TEXT NOT NULL,
         FOREIGN KEY (menu_item_id) REFERENCES menu_items(id) ON DELETE CASCADE
     )`);
 
@@ -97,11 +106,18 @@ app.get('/api/menu-items/:id', (req, res) => {
         const icols = ings[0].columns;
         row.ingredients = ings[0].values.map(r => Object.fromEntries(icols.map((c, i) => [c, r[i]])));
     }
+
+    const stps = db.exec(`SELECT * FROM steps WHERE menu_item_id = ? ORDER BY step_number`, [req.params.id]);
+    row.steps = [];
+    if (stps.length) {
+        const scols = stps[0].columns;
+        row.steps = stps[0].values.map(r => Object.fromEntries(scols.map((c, i) => [c, r[i]])));
+    }
     res.json(row);
 });
 
 app.post('/api/menu-items', (req, res) => {
-    const { name, description, category, ingredients } = req.body;
+    const { name, description, category, ingredients, steps } = req.body;
     if (!name) return res.status(400).json({ error: 'Name required' });
 
     db.run(`INSERT INTO menu_items (name, description, category) VALUES (?, ?, ?)`,
@@ -115,12 +131,21 @@ app.post('/api/menu-items', (req, res) => {
                 [id, ing.name, ing.quantity || null, ing.unit || '']);
         }
     }
+    if (steps && steps.length) {
+        for (let i = 0; i < steps.length; i++) {
+            const instruction = typeof steps[i] === 'string' ? steps[i] : steps[i].instruction;
+            if (instruction) {
+                db.run(`INSERT INTO steps (menu_item_id, step_number, instruction) VALUES (?, ?, ?)`,
+                    [id, i + 1, instruction]);
+            }
+        }
+    }
     saveDB();
     res.json({ id, name, description, category });
 });
 
 app.put('/api/menu-items/:id', (req, res) => {
-    const { name, description, category, ingredients } = req.body;
+    const { name, description, category, ingredients, steps } = req.body;
     db.run(`UPDATE menu_items SET name=?, description=?, category=? WHERE id=?`,
         [name, description || '', category || 'Main', req.params.id]);
 
@@ -132,12 +157,24 @@ app.put('/api/menu-items/:id', (req, res) => {
                 [req.params.id, ing.name, ing.quantity || null, ing.unit || '']);
         }
     }
+    // Replace all steps
+    db.run(`DELETE FROM steps WHERE menu_item_id = ?`, [req.params.id]);
+    if (steps && steps.length) {
+        for (let i = 0; i < steps.length; i++) {
+            const instruction = typeof steps[i] === 'string' ? steps[i] : steps[i].instruction;
+            if (instruction) {
+                db.run(`INSERT INTO steps (menu_item_id, step_number, instruction) VALUES (?, ?, ?)`,
+                    [req.params.id, i + 1, instruction]);
+            }
+        }
+    }
     saveDB();
     res.json({ success: true });
 });
 
 app.delete('/api/menu-items/:id', (req, res) => {
     db.run(`DELETE FROM ingredients WHERE menu_item_id = ?`, [req.params.id]);
+    db.run(`DELETE FROM steps WHERE menu_item_id = ?`, [req.params.id]);
     db.run(`DELETE FROM meal_plan WHERE menu_item_id = ?`, [req.params.id]);
     db.run(`DELETE FROM menu_items WHERE id = ?`, [req.params.id]);
     saveDB();
@@ -377,6 +414,15 @@ ${textContent}
                     if (!ing.name) continue;
                     db.run(`INSERT INTO ingredients (menu_item_id, name, quantity, unit) VALUES (?, ?, ?, ?)`,
                         [id, ing.name, ing.quantity || null, ing.unit || '']);
+                }
+            }
+            if (recipe.steps && recipe.steps.length) {
+                for (let i = 0; i < recipe.steps.length; i++) {
+                    const instruction = typeof recipe.steps[i] === 'string' ? recipe.steps[i] : recipe.steps[i].instruction;
+                    if (instruction) {
+                        db.run(`INSERT INTO steps (menu_item_id, step_number, instruction) VALUES (?, ?, ?)`,
+                            [id, i + 1, instruction]);
+                    }
                 }
             }
             inserted.push({ id, name: recipe.name, ingredientCount: (recipe.ingredients || []).length });
