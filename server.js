@@ -282,20 +282,26 @@ app.post('/api/import-recipes', upload.single('file'), async (req, res) => {
                     }
                 ]
             }];
-        } else if (mime === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
-            // For .docx, extract raw text from the XML inside the zip
-            // Simple approach: just read the buffer as-is and let Claude parse what it can
-            textContent = req.file.buffer.toString('utf-8');
-            // If that's garbled, try to extract readable portions
-            if (textContent.includes('PK')) {
-                // It's a zip (docx), extract text between XML tags
-                const matches = req.file.buffer.toString('utf-8').match(/<w:t[^>]*>([^<]+)<\/w:t>/g);
-                if (matches) {
-                    textContent = matches.map(m => m.replace(/<[^>]+>/g, '')).join(' ');
-                } else {
-                    textContent = req.file.buffer.toString('utf-8').replace(/<[^>]+>/g, ' ').replace(/[^\x20-\x7E\n]/g, '').trim();
-                }
-            }
+        } else if (mime === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+                   mime === 'application/msword') {
+            // Send Word docs directly to Claude as base64 documents
+            const base64 = req.file.buffer.toString('base64');
+            const mediaType = mime === 'application/msword'
+                ? 'application/msword'
+                : 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+            messages = [{
+                role: 'user',
+                content: [
+                    {
+                        type: 'document',
+                        source: { type: 'base64', media_type: mediaType, data: base64 }
+                    },
+                    {
+                        type: 'text',
+                        text: PARSE_PROMPT
+                    }
+                ]
+            }];
         } else {
             // Try to read as text anyway
             textContent = req.file.buffer.toString('utf-8');
