@@ -481,6 +481,38 @@ label {
     transform: translateY(-50%);
     color: var(--ink-light);
 }
+
+.filter-pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    margin-bottom: 0.75rem;
+}
+.filter-pills .pill {
+    padding: 0.3rem 0.7rem;
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    background: var(--surface);
+    color: var(--ink-muted);
+    font-family: 'Manrope', sans-serif;
+    font-size: 0.72rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+.filter-pills .pill:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+}
+.filter-pills .pill.active {
+    background: var(--accent);
+    color: #fff;
+    border-color: var(--accent);
+}
+.filter-pills .easy-pill.active {
+    background: var(--green);
+    border-color: var(--green);
+}
 </style>
 </head>
 <body>
@@ -513,6 +545,18 @@ label {
                 <div class="search-box">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
                     <input type="text" id="recipe-search" placeholder="Search recipes..." oninput="filterRecipes()">
+                </div>
+                <div id="recipe-filters" class="filter-pills">
+                    <button class="pill active" onclick="toggleFilter(this, 'all')">All</button>
+                    <button class="pill" onclick="toggleFilter(this, 'Main')">Main</button>
+                    <button class="pill" onclick="toggleFilter(this, 'Side')">Side</button>
+                    <button class="pill" onclick="toggleFilter(this, 'Drink')">Drink</button>
+                    <button class="pill" onclick="toggleFilter(this, 'Breakfast')">Breakfast</button>
+                    <button class="pill" onclick="toggleFilter(this, 'Soup')">Soup</button>
+                    <button class="pill" onclick="toggleFilter(this, 'Salad')">Salad</button>
+                    <button class="pill" onclick="toggleFilter(this, 'Dessert')">Dessert</button>
+                    <button class="pill" onclick="toggleFilter(this, 'Snack')">Snack</button>
+                    <button class="pill easy-pill" onclick="toggleFilter(this, 'easy')">Easy</button>
                 </div>
                 <div id="recipe-list"></div>
             </div>
@@ -678,12 +722,21 @@ async function loadRecipes() {
     renderRecipeList();
 }
 
+let activeFilter = 'all';
+
 function renderRecipeList() {
     const q = (document.getElementById('recipe-search').value || '').toLowerCase();
-    const filtered = allMenuItems.filter(i => i.name.toLowerCase().includes(q) || (i.category||'').toLowerCase().includes(q));
+    let filtered = allMenuItems.filter(i => i.name.toLowerCase().includes(q) || (i.category||'').toLowerCase().includes(q));
+    
+    if (activeFilter === 'easy') {
+        filtered = filtered.filter(i => i.easy);
+    } else if (activeFilter !== 'all') {
+        filtered = filtered.filter(i => (i.category || 'Main') === activeFilter);
+    }
+
     const list = document.getElementById('recipe-list');
     if (!filtered.length) {
-        list.innerHTML = '<p class="text-muted" style="padding:1rem 0;">No recipes yet. Click "+ New" to add one.</p>';
+        list.innerHTML = '<p class="text-muted" style="padding:1rem 0;">No recipes match this filter.</p>';
         return;
     }
     list.innerHTML = filtered.map(i => `
@@ -695,6 +748,13 @@ function renderRecipeList() {
 }
 
 function filterRecipes() { renderRecipeList(); }
+
+function toggleFilter(btn, value) {
+    activeFilter = value;
+    document.querySelectorAll('#recipe-filters .pill').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    renderRecipeList();
+}
 
 function newRecipe() {
     selectedRecipeId = null;
