@@ -468,5 +468,5 @@ ${textContent}
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
 
 initDB().then(() => {
-    app.listen(PORT, () => console.log(`Menu Planner running on port ${PORT}`));
+    app.listen(PORT, () => console.log(`Ramsey Menu Planner running on port ${PORT}`));
 });
