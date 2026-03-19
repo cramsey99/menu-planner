@@ -240,8 +240,14 @@ label {
 /* ═══════════════════════════════
    CALENDAR TAB
    ═══════════════════════════════ */
-.calendar-layout { display: grid; grid-template-columns: 240px 1fr; gap: 1.5rem; }
+.calendar-layout { display: grid; grid-template-columns: 240px 1fr; gap: 1.5rem; align-items: start; }
 @media (max-width: 800px) { .calendar-layout { grid-template-columns: 1fr; } }
+.calendar-layout > div:first-child .panel {
+    position: sticky;
+    top: 80px;
+    max-height: calc(100vh - 100px);
+    overflow-y: auto;
+}
 
 .drag-source {
     padding: 0.55rem 0.85rem;
@@ -459,32 +465,6 @@ label {
 .flex-between { display: flex; justify-content: space-between; align-items: center; }
 .gap-sm { gap: 0.4rem; }
 
-/* ── Drag-drop meal type popup ── */
-.drop-popup {
-    position: absolute;
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    box-shadow: var(--shadow-lg);
-    padding: 0.5rem;
-    z-index: 50;
-    display: flex;
-    flex-direction: column;
-    gap: 0.25rem;
-}
-.drop-popup button {
-    padding: 0.4rem 0.8rem;
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 0.8rem;
-    font-weight: 600;
-    text-align: left;
-    background: none;
-    font-family: 'DM Sans', sans-serif;
-}
-.drop-popup button:hover { background: var(--surface-alt); }
-
 /* ── Search ── */
 .search-box {
     position: relative;
@@ -653,13 +633,7 @@ label {
 
 </div><!-- /container -->
 
-<!-- Meal type popup (appears after drag-drop) -->
-<div id="drop-popup" class="drop-popup" style="display:none;">
-    <button onclick="confirmDrop('breakfast')">🌅 Breakfast</button>
-    <button onclick="confirmDrop('lunch')">☀️ Lunch</button>
-    <button onclick="confirmDrop('dinner')">🌙 Dinner</button>
-    <button onclick="confirmDrop('snack')">🍎 Snack</button>
-</div>
+<!-- end of tabs -->
 
 <script>
 /* ══════════════════════════════════════
@@ -669,7 +643,7 @@ let allMenuItems = [];
 let selectedRecipeId = null;
 let calYear, calMonth; // 0-indexed month
 let mealPlanCache = []; // current month's plan
-let pendingDrop = null; // { menuItemId, dateStr, x, y }
+let dragData = null;
 
 /* ══════════════════════════════════════
    TAB SWITCHING
@@ -1036,30 +1010,21 @@ function onDrop(e) {
     if (!dragData) return;
 
     if (dragData.type === 'move') {
-        // Moving existing meal — skip meal type popup, keep existing type
         moveMeal(dragData.planId, dateVal);
         dragData = null;
         return;
     }
 
-    // New item — show meal type popup
-    const rect = day.getBoundingClientRect();
-    pendingDrop = { menuItemId: dragData.menuItemId, dateStr: dateVal };
-    const popup = document.getElementById('drop-popup');
-    popup.style.display = 'flex';
-    popup.style.left = rect.left + 'px';
-    popup.style.top = (rect.bottom + 4) + 'px';
+    // New item — assign directly as dinner
+    assignMeal(dragData.menuItemId, dateVal);
     dragData = null;
 }
 
-async function confirmDrop(mealType) {
-    document.getElementById('drop-popup').style.display = 'none';
-    if (!pendingDrop) return;
+async function assignMeal(menuItemId, dateStr) {
     await api('/api/meal-plan', {
         method: 'POST',
-        body: { menu_item_id: pendingDrop.menuItemId, plan_date: pendingDrop.dateStr, meal_type: mealType }
+        body: { menu_item_id: menuItemId, plan_date: dateStr, meal_type: 'dinner' }
     });
-    pendingDrop = null;
     loadCalendar();
 }
 
@@ -1077,15 +1042,6 @@ async function removeMeal(planId) {
     await api('/api/meal-plan/' + planId, { method: 'DELETE' });
     loadCalendar();
 }
-
-// Close popup on click outside
-document.addEventListener('click', (e) => {
-    const popup = document.getElementById('drop-popup');
-    if (popup.style.display !== 'none' && !popup.contains(e.target)) {
-        popup.style.display = 'none';
-        pendingDrop = null;
-    }
-});
 
 /* ══════════════════════════════════════
    SHOPPING LIST TAB
