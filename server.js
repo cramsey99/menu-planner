@@ -8,7 +8,7 @@ const PARSE_PROMPT = `Extract ALL recipes from this document. For each recipe, r
 - "name": string (recipe name)
 - "description": string (brief description or cooking notes)
 - "category": string (one of: Main, Side, Breakfast, Soup, Salad, Dessert, Snack, Drink)
-- "ingredients": array of {"name": string, "quantity": number or null, "unit": string}
+- "ingredients": array of {"name": string, "quantity": number or null, "unit": string} — use abbreviated units: tsp, TBSP, cup, oz, lb, clove, can, pkg, bunch, piece, pinch, dash, qt, pt, gal, ml, L, g, kg. Leave empty string if no unit.
 - "steps": array of strings, each string is one instruction step in order
 
 Return ONLY valid JSON array, no markdown, no explanation. If quantities are written as fractions like "1/2", convert to decimal (0.5). If no quantity is specified, use null. If no steps/instructions are found, use an empty array.`;
