@@ -413,6 +413,7 @@ label {
     padding: 0.55rem 0.75rem;
     border-bottom: 1px solid var(--surface-alt);
     font-size: 0.88rem;
+    transition: opacity 0.2s;
 }
 .shopping-table tr:hover td { background: var(--accent-light); }
 .shopping-table .qty {
@@ -620,7 +621,7 @@ label {
         <div id="shop-ingredients-panel" style="display:none">
             <h2>Ingredients Needed</h2>
             <table class="shopping-table">
-                <thead><tr><th>Ingredient</th><th>Quantity</th><th>Unit</th></tr></thead>
+                <thead><tr><th style="width:40px;">Have</th><th>Ingredient</th><th>Quantity</th><th>Unit</th><th style="width:40px;"></th></tr></thead>
                 <tbody id="shop-ingredients-body"></tbody>
             </table>
         </div>
@@ -1097,13 +1098,17 @@ async function loadShoppingList() {
     if (data.ingredients.length) {
         panel.style.display = '';
         empty.style.display = 'none';
-        tbody.innerHTML = data.ingredients.map(ing => `
+        tbody.innerHTML = data.ingredients.map(ing => {
+            const walmartUrl = 'https://www.walmart.com/search?q=' + encodeURIComponent(ing.name);
+            return `
             <tr>
+                <td style="text-align:center;"><input type="checkbox" style="width:auto;accent-color:var(--green);cursor:pointer;" onchange="this.closest('tr').style.opacity=this.checked?'0.4':'1';this.closest('tr').style.textDecoration=this.checked?'line-through':'none'"></td>
                 <td>${esc(ing.name)}</td>
                 <td class="qty">${ing.total_quantity != null ? ing.total_quantity : '—'}</td>
                 <td>${esc(ing.unit || '')}</td>
-            </tr>
-        `).join('');
+                <td><a href="${walmartUrl}" target="_blank" rel="noopener" title="Search Walmart" style="text-decoration:none;font-size:1.1rem;">🛒</a></td>
+            </tr>`;
+        }).join('');
     } else if (data.meals.length) {
         panel.style.display = 'none';
         empty.style.display = '';
