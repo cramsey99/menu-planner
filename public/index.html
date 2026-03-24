@@ -3,6 +3,12 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#4a7c59">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Menu Planner">
+<link rel="manifest" href="/manifest.json">
+<link rel="apple-touch-icon" href="/icon-192.png">
 <title>Ramsey Menu Planner</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -512,6 +518,74 @@ label {
 .filter-pills .easy-pill.active {
     background: var(--green);
     border-color: var(--green);
+}
+
+/* ═══════════════════════════════
+   MOBILE RESPONSIVE
+   ═══════════════════════════════ */
+@media (max-width: 600px) {
+    header {
+        padding: 0 1rem;
+        height: auto;
+        min-height: 56px;
+        flex-wrap: wrap;
+        gap: 0.25rem;
+        padding-top: 0.5rem;
+        padding-bottom: 0.5rem;
+    }
+    header h1 { font-size: 1.1rem; }
+    nav { width: 100%; justify-content: center; }
+    nav button { padding: 0.35rem 0.75rem; font-size: 0.75rem; }
+
+    .container { padding: 1rem; }
+
+    .recipes-layout { grid-template-columns: 1fr !important; }
+    .calendar-layout { grid-template-columns: 1fr !important; }
+    .calendar-layout > div:first-child .panel {
+        position: static !important;
+        max-height: none !important;
+        overflow-y: visible !important;
+    }
+
+    .panel { padding: 1rem; }
+    .panel h2 { font-size: 1rem; }
+
+    .form-row { flex-direction: column; gap: 0.5rem; }
+    .form-row > div { flex: 1 !important; }
+
+    .ingredient-row { flex-wrap: wrap; }
+    .ingredient-row input:nth-child(1) { flex: 1 1 100%; }
+
+    .step-row textarea { min-height: 3rem; }
+
+    .cal-day { min-height: 80px; padding: 0.3rem; }
+    .day-num { font-size: 0.7rem; }
+    .meal-chip { font-size: 0.65rem; padding: 0.2rem 0.35rem; }
+    .meal-chip .remove-meal { font-size: 0.75rem; }
+
+    .cal-nav { flex-direction: column; gap: 0.5rem; align-items: stretch; }
+    .cal-nav h2 { font-size: 1rem; text-align: center; }
+    .cal-nav .btn-group { justify-content: center; }
+
+    .filter-pills { gap: 0.25rem; }
+    .filter-pills .pill { padding: 0.25rem 0.55rem; font-size: 0.68rem; }
+
+    .shopping-controls { flex-direction: column; }
+    .week-meals { grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); }
+
+    .shopping-table { font-size: 0.8rem; }
+    .shopping-table th { padding: 0.4rem; font-size: 0.7rem; }
+    .shopping-table td { padding: 0.4rem; }
+
+    .btn { padding: 0.45rem 0.85rem; font-size: 0.8rem; }
+    .btn-sm { padding: 0.3rem 0.6rem; font-size: 0.72rem; }
+}
+
+/* Recipe view mode for cooking */
+@media (max-width: 600px) {
+    .recipe-list-item .name { font-size: 0.88rem; }
+    .recipe-list-item .category { font-size: 0.68rem; }
+    .recipe-list-item { padding: 0.6rem 0.8rem; }
 }
 </style>
 </head>
@@ -1229,6 +1303,11 @@ function fmtUnit(u) {
    INIT
    ══════════════════════════════════════ */
 loadRecipes();
+
+// Register service worker for PWA
+if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/sw.js').catch(() => {});
+}
 </script>
 </body>
 </html>
