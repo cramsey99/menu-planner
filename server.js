@@ -59,6 +59,7 @@ async function initDB() {
         name TEXT NOT NULL,
         quantity REAL,
         unit TEXT,
+        position INTEGER DEFAULT 0,
         FOREIGN KEY (menu_item_id) REFERENCES menu_items(id) ON DELETE CASCADE
     )`);
 
@@ -80,6 +81,13 @@ async function initDB() {
 
     // Migration: add easy column if it doesn't exist
     try { db.run(`ALTER TABLE menu_items ADD COLUMN easy INTEGER DEFAULT 0`); } catch(e) {}
+
+    // Migration: add ingredient position column if it doesn't exist.
+    // Backfill existing rows so their first load keeps current display order (by id).
+    try {
+        db.run(`ALTER TABLE ingredients ADD COLUMN position INTEGER DEFAULT 0`);
+        db.run(`UPDATE ingredients SET position = id`);
+    } catch(e) {}
 
     saveDB();
     console.log('Database initialized');
@@ -127,7 +135,7 @@ app.get('/api/menu-items/:id', (req, res) => {
     const cols = item[0].columns;
     const row = Object.fromEntries(cols.map((c, i) => [c, item[0].values[0][i]]));
 
-    const ings = db.exec(`SELECT * FROM ingredients WHERE menu_item_id = ? ORDER BY name`, [req.params.id]);
+    const ings = db.exec(`SELECT * FROM ingredients WHERE menu_item_id = ? ORDER BY position, id`, [req.params.id]);
     row.ingredients = [];
     if (ings.length) {
         const icols = ings[0].columns;
@@ -153,9 +161,10 @@ app.post('/api/menu-items', (req, res) => {
     const id = idResult[0].values[0][0];
 
     if (ingredients && ingredients.length) {
-        for (const ing of ingredients) {
-            db.run(`INSERT INTO ingredients (menu_item_id, name, quantity, unit) VALUES (?, ?, ?, ?)`,
-                [id, ing.name, ing.quantity || null, ing.unit || '']);
+        for (let i = 0; i < ingredients.length; i++) {
+            const ing = ingredients[i];
+            db.run(`INSERT INTO ingredients (menu_item_id, name, quantity, unit, position) VALUES (?, ?, ?, ?, ?)`,
+                [id, ing.name, ing.quantity || null, ing.unit || '', i]);
         }
     }
     if (steps && steps.length) {
@@ -179,9 +188,10 @@ app.put('/api/menu-items/:id', (req, res) => {
     // Replace all ingredients
     db.run(`DELETE FROM ingredients WHERE menu_item_id = ?`, [req.params.id]);
     if (ingredients && ingredients.length) {
-        for (const ing of ingredients) {
-            db.run(`INSERT INTO ingredients (menu_item_id, name, quantity, unit) VALUES (?, ?, ?, ?)`,
-                [req.params.id, ing.name, ing.quantity || null, ing.unit || '']);
+        for (let i = 0; i < ingredients.length; i++) {
+            const ing = ingredients[i];
+            db.run(`INSERT INTO ingredients (menu_item_id, name, quantity, unit, position) VALUES (?, ?, ?, ?, ?)`,
+                [req.params.id, ing.name, ing.quantity || null, ing.unit || '', i]);
         }
     }
     // Replace all steps
@@ -437,10 +447,11 @@ ${textContent}
             const id = idResult[0].values[0][0];
 
             if (recipe.ingredients && recipe.ingredients.length) {
+                let pos = 0;
                 for (const ing of recipe.ingredients) {
                     if (!ing.name) continue;
-                    db.run(`INSERT INTO ingredients (menu_item_id, name, quantity, unit) VALUES (?, ?, ?, ?)`,
-                        [id, ing.name, ing.quantity || null, ing.unit || '']);
+                    db.run(`INSERT INTO ingredients (menu_item_id, name, quantity, unit, position) VALUES (?, ?, ?, ?, ?)`,
+                        [id, ing.name, ing.quantity || null, ing.unit || '', pos++]);
                 }
             }
             if (recipe.steps && recipe.steps.length) {
