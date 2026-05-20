@@ -199,9 +199,30 @@ label {
     align-items: center;
     margin-bottom: 0.4rem;
 }
-.ingredient-row input:nth-child(1) { flex: 2; }
-.ingredient-row input:nth-child(2) { flex: 0.7; max-width: 80px; }
-.ingredient-row input:nth-child(3) { flex: 0.7; max-width: 80px; }
+.ingredient-row input:nth-of-type(1) { flex: 2; }
+.ingredient-row input:nth-of-type(2) { flex: 0.7; max-width: 80px; }
+.ingredient-row input:nth-of-type(3) { flex: 0.7; max-width: 80px; }
+.ingredient-row .drag-handle {
+    flex-shrink: 0;
+    width: 22px;
+    cursor: grab;
+    color: #999;
+    text-align: center;
+    font-size: 1.1rem;
+    line-height: 1;
+    user-select: none;
+    touch-action: none;
+}
+.ingredient-row .drag-handle:active { cursor: grabbing; }
+.ingredient-row.dragging {
+    opacity: 0.4;
+}
+.ingredient-row.drag-over-top {
+    box-shadow: 0 -2px 0 0 #4a90d9;
+}
+.ingredient-row.drag-over-bottom {
+    box-shadow: 0 2px 0 0 #4a90d9;
+}
 .ingredient-row button {
     flex-shrink: 0;
     width: 30px; height: 30px;
@@ -554,7 +575,7 @@ label {
     .form-row > div { flex: 1 !important; }
 
     .ingredient-row { flex-wrap: wrap; }
-    .ingredient-row input:nth-child(1) { flex: 1 1 100%; }
+    .ingredient-row input:nth-of-type(1) { flex: 1 1 100%; }
 
     .step-row textarea { min-height: 8rem; }
 
@@ -873,6 +894,7 @@ function addIngredientRow(data) {
     const row = document.createElement('div');
     row.className = 'ingredient-row';
     row.innerHTML = `
+        <span class="drag-handle" draggable="true" title="Drag to reorder">⠿</span>
         <input type="text" placeholder="Ingredient" value="${esc((data && data.name) || '')}">
         <input type="number" placeholder="Qty" step="any" value="${data && data.quantity != null ? data.quantity : ''}">
         <input type="text" placeholder="Unit" value="${esc((data && data.unit) || '')}">
@@ -880,6 +902,61 @@ function addIngredientRow(data) {
     `;
     document.getElementById('ingredients-list').appendChild(row);
 }
+
+// Drag-to-reorder for ingredient rows (delegated, works for dynamically added rows)
+(function setupIngredientDrag() {
+    const list = document.getElementById('ingredients-list');
+    if (!list) return;
+    let dragRow = null;
+
+    list.addEventListener('dragstart', e => {
+        const handle = e.target.closest('.drag-handle');
+        if (!handle) return;
+        dragRow = handle.closest('.ingredient-row');
+        if (!dragRow) return;
+        e.dataTransfer.effectAllowed = 'move';
+        // Firefox needs data set for drag to fire
+        e.dataTransfer.setData('text/plain', '');
+        // Defer so the drag image is captured before opacity changes
+        setTimeout(() => dragRow && dragRow.classList.add('dragging'), 0);
+    });
+
+    list.addEventListener('dragover', e => {
+        if (!dragRow) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        const target = e.target.closest('.ingredient-row');
+        list.querySelectorAll('.ingredient-row').forEach(r => {
+            r.classList.remove('drag-over-top', 'drag-over-bottom');
+        });
+        if (!target || target === dragRow) return;
+        const rect = target.getBoundingClientRect();
+        const after = e.clientY > rect.top + rect.height / 2;
+        target.classList.add(after ? 'drag-over-bottom' : 'drag-over-top');
+    });
+
+    list.addEventListener('drop', e => {
+        if (!dragRow) return;
+        e.preventDefault();
+        const target = e.target.closest('.ingredient-row');
+        if (target && target !== dragRow) {
+            const rect = target.getBoundingClientRect();
+            const after = e.clientY > rect.top + rect.height / 2;
+            list.insertBefore(dragRow, after ? target.nextSibling : target);
+        }
+        list.querySelectorAll('.ingredient-row').forEach(r => {
+            r.classList.remove('drag-over-top', 'drag-over-bottom');
+        });
+    });
+
+    list.addEventListener('dragend', () => {
+        if (dragRow) dragRow.classList.remove('dragging');
+        list.querySelectorAll('.ingredient-row').forEach(r => {
+            r.classList.remove('drag-over-top', 'drag-over-bottom');
+        });
+        dragRow = null;
+    });
+})();
 
 function addStepRow(data) {
     const list = document.getElementById('steps-list');
