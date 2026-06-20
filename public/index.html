@@ -231,10 +231,37 @@ label {
     cursor: pointer; font-size: 1rem;
     display: flex; align-items: center; justify-content: center;
 }
-/* Declutter: hide ingredient delete button and drag handle only in the installed home-screen app */
+/* Declutter and full-screen recipe view only in the installed home-screen app */
 @media (display-mode: standalone) {
     .ingredient-row button { display: none; }
     .ingredient-row .drag-handle { display: none; }
+
+    /* When a recipe is being edited/viewed, take over the screen */
+    body.recipe-open #recipe-editor {
+        position: fixed;
+        inset: 0;
+        z-index: 1000;
+        margin: 0;
+        border-radius: 0;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+        padding-bottom: 4rem;
+    }
+    body.recipe-open header,
+    body.recipe-open #tab-recipes > .recipes-layout > div:first-child,
+    body.recipe-open #recipe-empty {
+        display: none !important;
+    }
+    body.recipe-open #recipe-editor > .flex-between {
+        position: sticky;
+        top: 0;
+        background: var(--panel-bg, #fff);
+        padding: 0.75rem 0;
+        margin: 0 0 1rem 0;
+        z-index: 2;
+        border-bottom: 1px solid #eee;
+    }
+    .pwa-back-btn { display: inline-flex !important; }
 }
 
 .step-row {
@@ -256,8 +283,9 @@ label {
 }
 .step-row textarea {
     flex: 1;
-    min-height: 3.5rem;
-    resize: vertical;
+    min-height: 2.5rem;
+    resize: none;
+    overflow: hidden;
 }
 .step-row button {
     flex-shrink: 0;
@@ -582,7 +610,7 @@ label {
     .ingredient-row { flex-wrap: wrap; }
     .ingredient-row input:nth-of-type(1) { flex: 1 1 100%; }
 
-    .step-row textarea { min-height: 8rem; }
+    .step-row textarea { min-height: 2.5rem; }
 
     .cal-day { min-height: 80px; padding: 0.3rem; }
     .day-num { font-size: 0.7rem; }
@@ -664,7 +692,10 @@ label {
         <div>
             <div class="panel" id="recipe-editor" style="display:none">
                 <div class="flex-between mb-1">
-                    <h2 id="editor-title">New Recipe</h2>
+                    <div style="display:flex;align-items:center;gap:0.5rem;">
+                        <button class="btn btn-secondary btn-sm pwa-back-btn" onclick="closeRecipe()" title="Back to recipes" style="display:none">← Back</button>
+                        <h2 id="editor-title">New Recipe</h2>
+                    </div>
                     <div style="display:flex;gap:0.4rem;">
                         <button class="btn btn-danger btn-sm" id="delete-recipe-btn" onclick="deleteRecipe()" style="display:none">Delete</button>
                         <button class="btn btn-primary btn-sm" onclick="saveRecipe()">Save</button>
@@ -860,6 +891,7 @@ function newRecipe() {
     selectedRecipeId = null;
     document.getElementById('recipe-editor').style.display = '';
     document.getElementById('recipe-empty').style.display = 'none';
+    document.body.classList.add('recipe-open');
     document.getElementById('editor-title').textContent = 'New Recipe';
     document.getElementById('delete-recipe-btn').style.display = 'none';
     document.getElementById('recipe-name').value = '';
@@ -880,18 +912,30 @@ async function selectRecipe(id) {
     const item = await api('/api/menu-items/' + id);
     document.getElementById('recipe-editor').style.display = '';
     document.getElementById('recipe-empty').style.display = 'none';
+    document.body.classList.add('recipe-open');
+    window.scrollTo(0, 0);
     document.getElementById('editor-title').textContent = 'Edit Recipe';
     document.getElementById('delete-recipe-btn').style.display = '';
     document.getElementById('recipe-name').value = item.name;
     document.getElementById('recipe-category').value = item.category || 'Main';
     document.getElementById('recipe-easy').checked = !!item.easy;
     document.getElementById('recipe-description').value = item.description || '';
+    autoGrow(document.getElementById('recipe-description'));
     document.getElementById('ingredients-list').innerHTML = '';
     (item.ingredients || []).forEach(ing => addIngredientRow(ing));
     if (!item.ingredients || !item.ingredients.length) { addIngredientRow(); addIngredientRow(); }
     document.getElementById('steps-list').innerHTML = '';
     (item.steps || []).forEach(step => addStepRow(step));
     if (!item.steps || !item.steps.length) { addStepRow(); }
+    autoGrowAllSteps();
+    renderRecipeList();
+}
+
+function closeRecipe() {
+    selectedRecipeId = null;
+    document.getElementById('recipe-editor').style.display = 'none';
+    document.getElementById('recipe-empty').style.display = '';
+    document.body.classList.remove('recipe-open');
     renderRecipeList();
 }
 
@@ -975,6 +1019,18 @@ function addStepRow(data) {
         <button onclick="this.parentElement.remove();renumberSteps()">×</button>
     `;
     list.appendChild(row);
+    const ta = row.querySelector('textarea');
+    autoGrow(ta);
+    ta.addEventListener('input', () => autoGrow(ta));
+}
+
+function autoGrow(ta) {
+    ta.style.height = 'auto';
+    ta.style.height = ta.scrollHeight + 'px';
+}
+
+function autoGrowAllSteps() {
+    document.querySelectorAll('#steps-list textarea').forEach(autoGrow);
 }
 
 function renumberSteps() {
@@ -1028,6 +1084,7 @@ async function deleteRecipe() {
     selectedRecipeId = null;
     document.getElementById('recipe-editor').style.display = 'none';
     document.getElementById('recipe-empty').style.display = '';
+    document.body.classList.remove('recipe-open');
     await loadRecipes();
 }
 
@@ -1384,6 +1441,10 @@ function fmtUnit(u) {
 /* ══════════════════════════════════════
    INIT
    ══════════════════════════════════════ */
+(() => {
+    const desc = document.getElementById('recipe-description');
+    if (desc) desc.addEventListener('input', () => autoGrow(desc));
+})();
 loadRecipes();
 
 // Register service worker for PWA

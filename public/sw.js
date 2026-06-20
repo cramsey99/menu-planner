@@ -1,4 +1,4 @@
-const CACHE_NAME = 'menu-planner-v1';
+const CACHE_NAME = 'menu-planner-v1.1.0';
 const PRECACHE = [
     '/',
     '/manifest.json'
